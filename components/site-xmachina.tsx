@@ -28,7 +28,8 @@ const spaceGrotesk = Space_Grotesk({
   weight: ["400", "500", "700"],
 });
 
-const logoPath = "/logo_nova-xmachina.png";
+const basePath = process.env.NODE_ENV === "production" ? "/Xmachina2" : "";
+const logoPath = `${basePath}/logo-xmachina.png`;
 
 const navItems = [
   { label: "Tecnologia", href: "#tecnologia" },
