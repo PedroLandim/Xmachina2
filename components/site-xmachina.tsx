@@ -149,6 +149,32 @@ function NeuralNetworkScene() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    const canvasEl: HTMLCanvasElement = canvas;
+    const ctx2d: CanvasRenderingContext2D = ctx;
+
+    type NodeColor = "white" | "yellow";
+
+    type Node3D = {
+      id: number;
+      x: number;
+      y: number;
+      z: number;
+      pulse: number;
+      hue: NodeColor;
+    };
+
+    type ProjectedPoint = {
+      x: number;
+      y: number;
+      scale: number;
+      z: number;
+    };
+
+    type ProjectedNode = ProjectedPoint & {
+      idx: number;
+      hue: NodeColor;
+    };
+
     let animationFrame = 0;
     let width = 0;
     let height = 0;
@@ -165,7 +191,7 @@ function NeuralNetworkScene() {
     const half = cubeSize / 2;
     const nodeCount = 180;
 
-    const nodes = Array.from({ length: nodeCount }, (_, i) => ({
+    const nodes: Node3D[] = Array.from({ length: nodeCount }, (_, i) => ({
       id: i,
       x: (Math.random() - 0.5) * cubeSize,
       y: (Math.random() - 0.5) * cubeSize,
@@ -175,30 +201,36 @@ function NeuralNetworkScene() {
     }));
 
     const edges: Array<[number, number]> = [];
+
     for (let i = 0; i < nodes.length; i++) {
+      const sourceNode = nodes[i];
+      if (!sourceNode) continue;
+
       const nearest = nodes
-        .map((node, j) => {
+        .map((node, j): { j: number; d: number } | null => {
           if (i === j) return null;
-          const dx = nodes[i].x - node.x;
-          const dy = nodes[i].y - node.y;
-          const dz = nodes[i].z - node.z;
+
+          const dx = sourceNode.x - node.x;
+          const dy = sourceNode.y - node.y;
+          const dz = sourceNode.z - node.z;
+
           return { j, d: Math.sqrt(dx * dx + dy * dy + dz * dz) };
         })
-        .filter(Boolean)
-        .sort((a, b) => (a?.d || 0) - (b?.d || 0))
+        .filter((item): item is { j: number; d: number } => item !== null)
+        .sort((a, b) => a.d - b.d)
         .slice(0, 2);
 
       nearest.forEach((item) => {
-        if (!item) return;
         const a = Math.min(i, item.j);
         const b = Math.max(i, item.j);
+
         if (!edges.some(([x, y]) => x === a && y === b)) {
           edges.push([a, b]);
         }
       });
     }
 
-    const cubeCorners = [
+    const cubeCorners: Array<[number, number, number]> = [
       [-half, -half, -half],
       [half, -half, -half],
       [half, half, -half],
@@ -209,23 +241,34 @@ function NeuralNetworkScene() {
       [-half, half, half],
     ];
 
-    const cubeEdges = [
-      [0, 1], [1, 2], [2, 3], [3, 0],
-      [4, 5], [5, 6], [6, 7], [7, 4],
-      [0, 4], [1, 5], [2, 6], [3, 7],
+    const cubeEdges: Array<[number, number]> = [
+      [0, 1],
+      [1, 2],
+      [2, 3],
+      [3, 0],
+      [4, 5],
+      [5, 6],
+      [6, 7],
+      [7, 4],
+      [0, 4],
+      [1, 5],
+      [2, 6],
+      [3, 7],
     ];
 
     function resize() {
-      const rect = canvas.getBoundingClientRect();
+      const rect = canvasEl.getBoundingClientRect();
       width = rect.width;
       height = rect.height;
       dpr = Math.min(window.devicePixelRatio || 1, 2);
-      canvas.width = Math.round(width * dpr);
-      canvas.height = Math.round(height * dpr);
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      canvasEl.width = Math.round(width * dpr);
+      canvasEl.height = Math.round(height * dpr);
+
+      ctx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
 
-    function project(x: number, y: number, z: number) {
+    function project(x: number, y: number, z: number): ProjectedPoint {
       const cy = Math.cos(rotY);
       const sy = Math.sin(rotY);
       const cx = Math.cos(rotX);
@@ -246,31 +289,49 @@ function NeuralNetworkScene() {
     }
 
     function drawGlow() {
-      const glowA = ctx.createRadialGradient(width * 0.75, height * 0.72, 0, width * 0.75, height * 0.72, width * 0.34);
+      const glowA = ctx2d.createRadialGradient(
+        width * 0.75,
+        height * 0.72,
+        0,
+        width * 0.75,
+        height * 0.72,
+        width * 0.34
+      );
       glowA.addColorStop(0, "rgba(0,255,255,0.16)");
       glowA.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = glowA;
-      ctx.fillRect(0, 0, width, height);
+      ctx2d.fillStyle = glowA;
+      ctx2d.fillRect(0, 0, width, height);
 
-      const glowB = ctx.createRadialGradient(width * 0.28, height * 0.20, 0, width * 0.28, height * 0.20, width * 0.26);
+      const glowB = ctx2d.createRadialGradient(
+        width * 0.28,
+        height * 0.20,
+        0,
+        width * 0.28,
+        height * 0.20,
+        width * 0.26
+      );
       glowB.addColorStop(0, "rgba(244,227,0,0.12)");
       glowB.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = glowB;
-      ctx.fillRect(0, 0, width, height);
+      ctx2d.fillStyle = glowB;
+      ctx2d.fillRect(0, 0, width, height);
     }
 
     function drawCube() {
       const projectedCorners = cubeCorners.map(([x, y, z]) => project(x, y, z));
+
       cubeEdges.forEach(([a, b], idx) => {
         const p1 = projectedCorners[a];
         const p2 = projectedCorners[b];
+        if (!p1 || !p2) return;
+
         const pulse = (Math.sin(time * 1.4 + idx * 0.7) + 1) / 2;
-        ctx.beginPath();
-        ctx.moveTo(p1.x, p1.y);
-        ctx.lineTo(p2.x, p2.y);
-        ctx.lineWidth = 1.25;
-        ctx.strokeStyle = `rgba(255,255,255,${0.18 + pulse * 0.12})`;
-        ctx.stroke();
+
+        ctx2d.beginPath();
+        ctx2d.moveTo(p1.x, p1.y);
+        ctx2d.lineTo(p2.x, p2.y);
+        ctx2d.lineWidth = 1.25;
+        ctx2d.strokeStyle = `rgba(255,255,255,${0.18 + pulse * 0.12})`;
+        ctx2d.stroke();
       });
     }
 
@@ -279,12 +340,13 @@ function NeuralNetworkScene() {
       rotX += (targetRotX - rotX) * 0.05;
       rotY += (targetRotY - rotY) * 0.05;
 
-      ctx.clearRect(0, 0, width, height);
+      ctx2d.clearRect(0, 0, width, height);
       drawGlow();
       drawCube();
 
-      const projectedNodes = nodes.map((node, idx) => {
+      const projectedNodes: ProjectedNode[] = nodes.map((node, idx) => {
         const wobble = Math.sin(time * 1.4 + node.pulse) * 4;
+
         return {
           idx,
           hue: node.hue,
@@ -295,21 +357,24 @@ function NeuralNetworkScene() {
       edges.forEach(([a, b], idx) => {
         const p1 = projectedNodes[a];
         const p2 = projectedNodes[b];
+        if (!p1 || !p2) return;
+
         const mx = (p1.x + p2.x) / 2;
         const my = (p1.y + p2.y) / 2;
         const dist = Math.hypot(mx - pointerX, my - pointerY);
         const hover = Math.max(0, 1 - dist / 220);
         const pulse = (Math.sin(time * 2 + idx * 0.17) + 1) / 2;
 
-        ctx.beginPath();
-        ctx.moveTo(p1.x, p1.y);
-        ctx.lineTo(p2.x, p2.y);
-        ctx.lineWidth = 0.8 + hover * 1.3;
-        ctx.strokeStyle = `rgba(244,227,0,${0.08 + pulse * 0.1 + hover * 0.24})`;
-        ctx.stroke();
+        ctx2d.beginPath();
+        ctx2d.moveTo(p1.x, p1.y);
+        ctx2d.lineTo(p2.x, p2.y);
+        ctx2d.lineWidth = 0.8 + hover * 1.3;
+        ctx2d.strokeStyle = `rgba(244,227,0,${0.08 + pulse * 0.1 + hover * 0.24})`;
+        ctx2d.stroke();
       });
 
       projectedNodes
+        .slice()
         .sort((a, b) => b.scale - a.scale)
         .forEach((node, idx) => {
           const dist = Math.hypot(node.x - pointerX, node.y - pointerY);
@@ -317,30 +382,34 @@ function NeuralNetworkScene() {
           const pulse = (Math.sin(time * 2.2 + idx * 0.12) + 1) / 2;
           const radius = 2 + node.scale * 7.5 + hover * 2.2;
 
-          ctx.beginPath();
-          ctx.arc(node.x, node.y, radius * 2.2, 0, Math.PI * 2);
-          ctx.fillStyle = node.hue === "yellow"
-            ? `rgba(244,227,0,${0.07 + hover * 0.08})`
-            : `rgba(0,255,255,${0.035 + hover * 0.07})`;
-          ctx.fill();
+          ctx2d.beginPath();
+          ctx2d.arc(node.x, node.y, radius * 2.2, 0, Math.PI * 2);
+          ctx2d.fillStyle =
+            node.hue === "yellow"
+              ? `rgba(244,227,0,${0.07 + hover * 0.08})`
+              : `rgba(0,255,255,${0.035 + hover * 0.07})`;
+          ctx2d.fill();
 
-          ctx.beginPath();
-          ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
-          ctx.fillStyle = node.hue === "yellow"
-            ? `rgba(244,227,0,${0.82 + pulse * 0.12})`
-            : `rgba(255,255,255,${0.62 + pulse * 0.18 + hover * 0.18})`;
-          ctx.fill();
+          ctx2d.beginPath();
+          ctx2d.arc(node.x, node.y, radius, 0, Math.PI * 2);
+          ctx2d.fillStyle =
+            node.hue === "yellow"
+              ? `rgba(244,227,0,${0.82 + pulse * 0.12})`
+              : `rgba(255,255,255,${0.62 + pulse * 0.18 + hover * 0.18})`;
+          ctx2d.fill();
         });
 
       animationFrame = window.requestAnimationFrame(draw);
     }
 
     const handlePointerMove = (event: PointerEvent) => {
-      const rect = canvas.getBoundingClientRect();
+      const rect = canvasEl.getBoundingClientRect();
       pointerX = event.clientX - rect.left;
       pointerY = event.clientY - rect.top;
+
       const nx = (pointerX / rect.width) * 2 - 1;
       const ny = (pointerY / rect.height) * 2 - 1;
+
       targetRotY = -0.38 + nx * 0.85;
       targetRotX = 0.28 + ny * 0.42;
     };
@@ -357,13 +426,13 @@ function NeuralNetworkScene() {
     draw();
 
     window.addEventListener("resize", resize);
-    canvas.addEventListener("pointermove", handlePointerMove);
-    canvas.addEventListener("pointerleave", handlePointerLeave);
+    canvasEl.addEventListener("pointermove", handlePointerMove);
+    canvasEl.addEventListener("pointerleave", handlePointerLeave);
 
     return () => {
       window.removeEventListener("resize", resize);
-      canvas.removeEventListener("pointermove", handlePointerMove);
-      canvas.removeEventListener("pointerleave", handlePointerLeave);
+      canvasEl.removeEventListener("pointermove", handlePointerMove);
+      canvasEl.removeEventListener("pointerleave", handlePointerLeave);
       window.cancelAnimationFrame(animationFrame);
     };
   }, []);
